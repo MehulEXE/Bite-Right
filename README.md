@@ -2,6 +2,20 @@
 
 Bite-Right is an AI-powered food safety scanner that detects allergens and flags unsafe ingredients based on your personal health profile. It uses **OCR** (Tesseract) to scan food labels, cross-references ingredients against an allergen database, and provides instant Safe/Unsafe/Risk verdicts.
 .
+<img width="1366" height="606" alt="image" src="https://github.com/user-attachments/assets/0fcaccef-75e3-4460-90c2-1d713c5aa4d8" />
+
+<img width="1366" height="552" alt="image" src="https://github.com/user-attachments/assets/5ec4a67f-4c1b-4588-8b67-dcdebd5de6f9" />
+
+<img width="1366" height="558" alt="image" src="https://github.com/user-attachments/assets/d0e6a324-eb61-474c-9fcf-f1c5ac9a72a9" />
+
+<img width="791" height="554" alt="image" src="https://github.com/user-attachments/assets/afd76adf-b3de-41b1-ba3e-433f42941934" />
+
+<img width="1091" height="499" alt="image" src="https://github.com/user-attachments/assets/2ad8dac9-1424-46f7-9710-312666d49a53" />
+
+
+
+
+
 
 ---
 
