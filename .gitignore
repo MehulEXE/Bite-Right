@@ -1,0 +1,48 @@
+# ── Environment & Secrets ─────────────────────────────────────
+.env
+*.env
+.env.*
+frontend/config.js
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.Python
+venv/
+.venv/
+env/
+
+# ── Uploads & Temp ────────────────────────────────────────────
+bite-right-uploads/
+uploads/
+tmp/
+*.tmp
+
+# ── OS Files ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── IDE / Editor ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+# ── Node (if ever used) ──────────────────────────────────────
+node_modules/
+package-lock.json
