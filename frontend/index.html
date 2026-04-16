@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bite-Right | AI Allergy Detection</title>
+    <meta name="description" content="Bite-Right uses AI-powered OCR to scan food labels and detect allergens based on your personal health profile. Eat safely, every time.">
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet" />
+
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Framer Motion -->
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@0.292.0/dist/umd/lucide.min.js"></script>
+
+    <!-- Marked (Markdown Parser) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Firebase SDK (compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: { blue: '#3b82f6', green: '#84cc16', coral: '#ef4444', purple: '#a855f7', yellow: '#eab308' }
+                    },
+                    animation: { 'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite' }
+                }
+            }
+        }
+    </script>
+
+    <!-- App Configuration (Firebase keys, Backend URL) -->
+    <script src="config.js"></script>
+    <script>
+        firebase.initializeApp(FIREBASE_CONFIG);
+        const auth = firebase.auth();
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
+    </script>
+
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body class="bg-gray-50 text-gray-900 antialiased overflow-x-hidden selection:bg-brand-blue selection:text-white">
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="react">
+        const { useState, useEffect, useRef, createContext, useContext } = React;
+        const { motion, AnimatePresence } = window.Motion;
+
+        // Lucide icon helper
+        function createLucideIcon(iconData) {
+            return function LucideIcon({ size = 24, className = '', color = 'currentColor', strokeWidth = 2, ...props }) {
+                const [tag, attrs, children] = iconData;
+                return React.createElement('svg', {
+                    xmlns: 'http://www.w3.org/2000/svg', width: size, height: size,
+                    viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth, strokeLinecap: 'round',
+                    strokeLinejoin: 'round', className, ...props
+                }, ...children.map(([childTag, childAttrs]) => React.createElement(childTag, childAttrs)));
+            };
+        }
+        const _lu = window.lucide;
+        const ScanLine = createLucideIcon(_lu.ScanLine);
+        const ShieldCheck = createLucideIcon(_lu.ShieldCheck);
+        const Search = createLucideIcon(_lu.Search);
+        const UserIcon = createLucideIcon(_lu.User);
+        const LogOut = createLucideIcon(_lu.LogOut);
+        const ChevronRight = createLucideIcon(_lu.ChevronRight);
+        const ChevronDown = createLucideIcon(_lu.ChevronDown);
+        const Activity = createLucideIcon(_lu.Activity);
+        const AlertTriangle = createLucideIcon(_lu.AlertTriangle);
+        const CheckCircle = createLucideIcon(_lu.CheckCircle);
+        const Info = createLucideIcon(_lu.Info);
+        const UploadCloud = createLucideIcon(_lu.UploadCloud);
+        const XIcon = createLucideIcon(_lu.X);
+        const ArrowRight = createLucideIcon(_lu.ArrowRight);
+        const Lock = createLucideIcon(_lu.Lock);
+        const Mail = createLucideIcon(_lu.Mail);
+        const Camera = createLucideIcon(_lu.Camera);
+        const Zap = createLucideIcon(_lu.Zap);
+        const Eye = createLucideIcon(_lu.Eye);
+        const Heart = createLucideIcon(_lu.Heart);
+        const Star = createLucideIcon(_lu.Star);
+        const MessageCircle = createLucideIcon(_lu.MessageCircle);
+        const Globe = createLucideIcon(_lu.Globe);
+        const Database = createLucideIcon(_lu.Database);
+        const Smartphone = createLucideIcon(_lu.Smartphone);
+        const LayoutDashboard = createLucideIcon(_lu.LayoutDashboard);
+        const Utensils = createLucideIcon(_lu.Utensils);
+        const Dumbbell = createLucideIcon(_lu.Dumbbell);
+        const Leaf = createLucideIcon(_lu.Leaf);
+        const Sparkles = createLucideIcon(_lu.Sparkles);
+        const ClipboardList = createLucideIcon(_lu.ClipboardList);
+        const Settings = createLucideIcon(_lu.Settings);
+        const BookOpen = createLucideIcon(_lu.BookOpen);
+
+        // BACKEND_URL is loaded from config.js
+
+        // ── Context ─────────────────────────────────────────────
+        const AppContext = createContext();
+        const AppProvider = ({ children }) => {
+            const [user, setUser] = useState(null);
+            const [healthProfile, setHealthProfile] = useState(null);
+            const [currentPage, setCurrentPage] = useState('landing');
+            const [scanResult, setScanResult] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+
+            useEffect(() => {
+                const unsub = auth.onAuthStateChanged((firebaseUser) => {
+                    if (firebaseUser) {
+                        setUser({ name: firebaseUser.displayName || 'User', email: firebaseUser.email, photo: firebaseUser.photoURL });
+                    } else {
+                        setUser(null);
+                    }
+                    setAuthLoading(false);
+                });
+                return () => unsub();
+            }, []);
+
+            const navigate = (page) => { window.scrollTo({ top: 0, behavior: 'smooth' }); setCurrentPage(page); };
+            const login = (userData) => { setUser(userData); navigate('dashboard'); };
+            const logout = () => { auth.signOut(); setUser(null); setHealthProfile(null); setScanResult(null); navigate('landing'); };
+
+            return (
+                <AppContext.Provider value={{ user, setUser, healthProfile, setHealthProfile, currentPage, navigate, login, logout, scanResult, setScanResult, authLoading }}>
+                    {children}
+                </AppContext.Provider>
+            );
+        };
+        const useAppContext = () => useContext(AppContext);
+
+        // ── Animated Counter ────────────────────────────────────
+        const AnimatedCounter = ({ target, suffix = '', duration = 2000 }) => {
+            const [count, setCount] = useState(0);
+            const ref = useRef(null);
+            useEffect(() => {
+                const observer = new IntersectionObserver(([entry]) => {
+                    if (entry.isIntersecting) {
+                        let start = 0;
+                        const step = target / (duration / 16);
+                        const timer = setInterval(() => { start += step; if (start >= target) { setCount(target); clearInterval(timer); } else { setCount(Math.floor(start)); } }, 16);
+                        observer.disconnect();
+                    }
+                }, { threshold: 0.3 });
+                if (ref.current) observer.observe(ref.current);
+                return () => observer.disconnect();
+            }, [target]);
+            return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
+        };
+
+        // ── Navbar ──────────────────────────────────────────────
+        const Navbar = () => {
+            const { user, navigate, logout, setScanResult, healthProfile } = useAppContext();
+            const [searchQuery, setSearchQuery] = useState('');
+            const [searchFocused, setSearchFocused] = useState(false);
+            const [searchResults, setSearchResults] = useState([]);
+
+            const handleSearch = async (q) => {
+                setSearchQuery(q);
+                if (q.length < 2) { setSearchResults([]); return; }
+                try {
+                    const res = await fetch(`${BACKEND_URL}/api/products/search?q=${encodeURIComponent(q)}`);
+                    const data = await res.json();
+                    setSearchResults(data.products?.slice(0, 5) || []);
+                } catch { setSearchResults([]); }
+            };
+
+            const handleSelectProduct = async (product) => {
+                setSearchQuery('');
+                setSearchFocused(false);
+                try {
+                    const params = {
+                        text: product.ingredients,
+                        allergies: healthProfile?.allergies || [],
+                        conditions: healthProfile?.medicalConditions || [],
+                        diet: healthProfile?.dietaryPreferences || []
+                    };
+                    const res = await fetch(`${BACKEND_URL}/api/analyze-text`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(params)
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        data.analysis.matched_product = product;
+                        setScanResult({
+                            success: true,
+                            ocr: { ingredients_text: product.ingredients, ingredients_list: data.ingredients_list },
+                            analysis: data.analysis
+                        });
+                        navigate('results');
+                    }
+                } catch (err) { console.error(err); }
+            };
+
+            return (
+                <nav className="sticky top-0 z-50 bg-black/80 backdrop-blur-md border-b border-zinc-800 shadow-sm">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex justify-between items-center h-16">
+                            <div className="flex items-center cursor-pointer" onClick={() => navigate(user ? 'dashboard' : 'landing')}>
+                                <motion.div whileHover={{ rotate: 10 }}><ShieldCheck className="h-8 w-8 text-brand-blue" /></motion.div>
+                                <span className="ml-2 text-xl font-display font-bold text-white tracking-tight">Bite<span className="text-brand-blue">Right</span></span>
+                            </div>
+                            {user && (
+                                <div className="flex-1 max-w-lg mx-6 relative">
+                                    <div className="relative"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500 h-4 w-4" />
+                                    <input type="text" placeholder="Search products..." className="w-full bg-zinc-900 border border-zinc-700 text-white text-sm rounded-full pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-brand-blue/50 transition-all placeholder-zinc-500" value={searchQuery} onChange={(e)=>handleSearch(e.target.value)} onFocus={()=>setSearchFocused(true)} onBlur={()=>setTimeout(()=>setSearchFocused(false),200)} /></div>
+                                    <AnimatePresence>{searchFocused && searchResults.length > 0 && (
+                                        <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}} className="absolute top-12 w-full bg-zinc-900 rounded-xl shadow-xl border border-zinc-800 py-2 z-50">
+                                            <div className="px-4 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Products</div>
+                                            {searchResults.map((item,i)=>(<div key={i} onMouseDown={()=>handleSelectProduct(item)} className="px-4 py-2 hover:bg-zinc-800 cursor-pointer flex justify-between items-center"><span className="text-sm font-medium text-white">{item.name}</span><span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${item.allergic_ingredients && item.allergic_ingredients!=='None'?'bg-red-500/20 text-red-400':'bg-emerald-500/20 text-emerald-400'}`}>{item.allergic_ingredients && item.allergic_ingredients!=='None'?'Has Allergens':'Safe'}</span></div>))}
+                                        </motion.div>
+                                    )}</AnimatePresence>
+                                </div>
+                            )}
+                            <div className="flex items-center space-x-4">
+                                {!user ? (<>
+                                    <button onClick={()=>navigate('auth')} className="text-zinc-300 hover:text-white font-medium text-sm">Login</button>
+                                    <motion.button whileHover={{scale:1.05}} whileTap={{scale:0.95}} onClick={()=>navigate('auth')} className="bg-brand-blue text-white px-5 py-2 rounded-full text-sm font-semibold shadow-lg shadow-brand-blue/30">Sign Up</motion.button>
+                                </>) : (
+                                    <div className="flex items-center space-x-3">
+                                        {user.photo && <img src={user.photo} alt="" className="w-8 h-8 rounded-full border-2 border-brand-blue/30 cursor-pointer" onClick={()=>navigate('profile')} />}
+                                        {!user.photo && <button onClick={()=>navigate('profile')} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:bg-zinc-700"><UserIcon size={16}/></button>}
+                                        <button onClick={logout} className="text-zinc-500 hover:text-red-400 transition-colors"><LogOut size={18}/></button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+            );
+        };
+
+        // ── Landing Page ────────────────────────────────────────
+        const Landing = () => {
+            const { navigate } = useAppContext();
+            const [openFaq, setOpenFaq] = useState(null);
+
+            const features = [
+                { icon: <Camera size={28}/>, title: 'OCR Scanning', desc: 'Snap a photo of any food label and our AI extracts every ingredient instantly.' },
+                { icon: <ShieldCheck size={28}/>, title: 'Allergen Detection', desc: 'Cross-references ingredients against 12+ major allergen categories.' },
+                { icon: <UserIcon size={28}/>, title: 'Health Profiles', desc: 'Configure allergies, medical conditions, and dietary preferences.' },
+                { icon: <Zap size={28}/>, title: 'Instant Results', desc: 'Get Safe/Unsafe/Risk verdicts in under 3 seconds.' },
+                { icon: <Database size={28}/>, title: 'Product Database', desc: '39+ Indian food products pre-loaded with ingredient and allergen data.' },
+                { icon: <Globe size={28}/>, title: 'Works Anywhere', desc: 'Scan any label in any language — our OCR handles multiple scripts.' },
+            ];
+
+            const allergens = [
+                { emoji: '🥜', name: 'Peanuts' }, { emoji: '🌰', name: 'Tree Nuts' },
+                { emoji: '🥛', name: 'Milk / Dairy' }, { emoji: '🥚', name: 'Eggs' },
+                { emoji: '🫘', name: 'Soy' }, { emoji: '🌾', name: 'Wheat / Gluten' },
+                { emoji: '🦐', name: 'Shellfish' }, { emoji: '🐟', name: 'Fish' },
+                { emoji: '🫒', name: 'Sesame' }, { emoji: '🟡', name: 'Mustard' },
+                { emoji: '🧪', name: 'Sulphites' }, { emoji: '🥬', name: 'Celery' },
+            ];
+
+            const testimonials = [
+                { name: 'Priya S.', text: 'As someone with severe peanut allergy, Bite-Right literally saved my life. I scan everything now!', rating: 5, avatar: 'https://i.pravatar.cc/100?img=25' },
+                { name: 'Rahul M.', text: 'My diabetic father uses this daily. The sugar flagging is incredibly accurate.', rating: 5, avatar: 'https://i.pravatar.cc/100?img=12' },
+                { name: 'Ananya K.', text: 'Perfect for my vegan diet. Catches hidden dairy ingredients I would have missed.', rating: 4, avatar: 'https://i.pravatar.cc/100?img=32' },
+            ];
+
+            const faqs = [
+                { q: 'How does the OCR scanning work?', a: 'Simply take a photo of any food label. Our Tesseract-powered OCR engine extracts all text, then our AI identifies ingredients and cross-checks them against your allergy profile and our allergen database.' },
+                { q: 'Is my health data secure?', a: 'Yes! Your health profile is stored locally in your browser session and authenticated via Google Firebase. We never share your medical information.' },
+                { q: 'What allergens can Bite-Right detect?', a: 'We detect 12+ major allergen categories including Peanuts, Tree Nuts, Milk, Eggs, Soy, Wheat/Gluten, Shellfish, Fish, Sesame, Mustard, Sulphites, and Celery — plus custom dietary and medical condition flags.' },
+                { q: 'How many products are in your database?', a: 'Our database currently includes 39+ popular Indian food products with detailed ingredient and allergen information, and is constantly growing.' },
+                { q: 'Can I use this for medical conditions like diabetes?', a: 'Absolutely! Configure your medical conditions in your health profile (Diabetes, High BP, Lactose/Gluten intolerance) and we\'ll flag problematic ingredients like sugar, sodium, and lactose.' },
+            ];
+
+            return (
+                <div className="relative overflow-hidden">
+                    {/* ── Hero Section (Premium Video & Glassmorphism) ───────────────────────────── */}
+                    <div className="relative min-h-screen flex flex-col justify-center overflow-hidden bg-black">
+                        {/* Image Background */}
+                        <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-20">
+                            <img src="assets/hero-bg.png" className="absolute top-1/2 left-1/2 min-w-full min-h-full w-auto h-auto object-cover transform -translate-x-1/2 -translate-y-1/2 opacity-60" alt="Modern clean kitchen" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/80"></div>
+                            <div className="absolute inset-0 bg-emerald-900/20 mix-blend-overlay"></div>
+                        </div>
+
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-32 flex flex-col lg:flex-row items-center w-full">
+                            <div className="lg:w-3/5 lg:pr-12 text-center lg:text-left z-10 flex flex-col items-center lg:items-start">
+                                <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.6}} className="inline-flex items-center space-x-2 bg-black/40 backdrop-blur-md border border-emerald-400/30 text-emerald-300 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-8 shadow-xl">
+                                    <ShieldCheck size={16}/><span className="font-['Inter']">The Digital Sommelier</span>
+                                </motion.div>
+                                
+                                <motion.h1 initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.8,delay:0.1}} className="text-5xl lg:text-8xl font-['Playfair_Display'] text-white leading-tight mb-6 italic tracking-tight">
+                                    Scan Before <br className="hidden lg:block"/>
+                                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-200 via-amber-200 to-emerald-400">You Eat.</span>
+                                </motion.h1>
+                                
+                                <motion.p initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.8,delay:0.2}} className="text-lg lg:text-xl text-gray-200 mb-12 max-w-xl mx-auto lg:mx-0 font-['Inter'] font-light leading-relaxed">
+                                    Your personal food safety sommelier. Advanced AI-powered spectral scanning logic detecting hidden allergens and ensuring every bite meets your epicurean standard.
+                                </motion.p>
+                                
+                                <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.8,delay:0.3}} className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-6 w-full justify-center lg:justify-start">
+                                    <button onClick={()=>navigate('auth')} className="bg-gradient-to-br from-emerald-700 to-emerald-900 border border-emerald-500/50 hover:from-emerald-600 hover:to-emerald-800 text-white px-10 py-4 rounded-full text-lg font-['Inter'] font-bold shadow-[0_0_30px_rgba(4,120,87,0.5)] transition-all transform hover:-translate-y-1 hover:scale-105 flex items-center justify-center space-x-3 backdrop-blur-sm">
+                                        <span>Get Started</span><ArrowRight size={20}/>
+                                    </button>
+                                    <button onClick={()=>navigate('dashboard')} className="bg-white/10 hover:bg-white/20 backdrop-blur-lg border border-white/30 text-white px-10 py-4 rounded-full text-lg font-['Inter'] font-semibold shadow-xl transition-all flex items-center justify-center space-x-3">
+                                        <ScanLine size={20} className="text-amber-200"/><span>Watch Demo</span>
+                                    </button>
+                                </motion.div>
+                            </div>
+                            
+                            {/* Glassmorphic Data Point Right Side */}
+                            <div className="lg:w-2/5 mt-20 lg:mt-0 relative z-10 w-full max-w-md mx-auto hidden lg:block">
+                                <motion.div initial={{opacity:0,x:40}} animate={{opacity:1,x:0}} transition={{duration:1,delay:0.5}} className="animate-float">
+                                    <div className="bg-white/10 backdrop-blur-xl border border-white/20 shadow-[0_0_40px_rgba(0,0,0,0.3)] p-8 rounded-[2rem] relative overflow-hidden">
+                                        <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/30 rounded-full blur-[50px]"></div>
+                                        <div className="flex justify-between items-center mb-8 relative z-10">
+                                            <div className="flex items-center space-x-4">
+                                                <div className="w-14 h-14 bg-gradient-to-br from-amber-200/20 to-amber-400/10 border border-amber-200/30 rounded-2xl flex items-center justify-center backdrop-blur-md">
+                                                    <ScanLine size={28} className="text-amber-300"/>
+                                                </div>
+                                                <div>
+                                                    <div className="text-gray-300 font-['Inter'] text-xs font-semibold tracking-wider uppercase mb-1">Live Analysis</div>
+                                                    <div className="text-white font-['Playfair_Display'] text-xl italic">Instant Scans</div>
+                                                </div>
+                                            </div>
+                                            <div className="px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-bold flex items-center shadow-lg">
+                                                <Zap size={14} className="mr-1"/><span>99% Accuracy</span>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-4 relative z-10">
+                                            <div className="h-4 w-full bg-white/10 rounded-md overflow-hidden"><div className="h-full bg-gradient-to-r from-emerald-400 to-amber-300 w-full rounded-md shadow-[0_0_15px_rgba(52,211,153,0.5)]"></div></div>
+                                            <div className="h-3 w-5/6 bg-white/10 rounded-md"></div>
+                                            <div className="h-3 w-4/6 bg-white/10 rounded-md"></div>
+                                        </div>
+                                        
+                                        <motion.div initial={{top:'-10%'}} animate={{top:'110%'}} transition={{duration:2.5,repeat:Infinity,ease:"linear"}} className="absolute left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-200 to-transparent shadow-[0_0_20px_rgba(253,230,138,0.8)] z-20"/>
+                                        
+                                        {/* Floating Allergen Tag */}
+                                        <div className="absolute -bottom-8 -left-8 bg-black/40 backdrop-blur-xl border border-emerald-500/30 shadow-2xl rounded-2xl p-4 flex items-center space-x-4 animate-float-delayed z-30">
+                                            <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shadow-[0_0_15px_rgba(52,211,153,0.3)]">
+                                                <CheckCircle size={24} className="text-emerald-400"/>
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-['Inter'] font-bold text-white tracking-wide">Completely Safe</div>
+                                                <div className="text-[11px] text-gray-300 mt-1 uppercase tracking-wider">No Allergens Detected</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── How It Works ────────────────────────────── */}
+                    <div className="py-24 bg-black">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <motion.div initial={{opacity:0,y:20}} whileInView={{opacity:1,y:0}} viewport={{once:true}} className="text-center mb-16">
+                                <span className="text-brand-blue font-semibold text-sm uppercase tracking-wider">Simple Process</span>
+                                <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mt-3">How It Works</h2>
+                                <p className="text-zinc-400 mt-4 max-w-2xl mx-auto text-lg">Three simple steps to safer eating. No complicated setup required.</p>
+                            </motion.div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                {[
+                                    { step: '01', title: 'Upload Label', desc: 'Take a photo or upload an image of any food product ingredient label.', icon: <UploadCloud size={32}/>, color: 'from-blue-500 to-blue-600' },
+                                    { step: '02', title: 'AI OCR Scan', desc: 'Our Tesseract-powered engine extracts text and identifies every ingredient.', icon: <ScanLine size={32}/>, color: 'from-purple-500 to-purple-600' },
+                                    { step: '03', title: 'Get Results', desc: 'Ingredients are flagged as Safe, Unsafe, or Potential Risk based on your profile.', icon: <ShieldCheck size={32}/>, color: 'from-green-500 to-green-600' },
+                                ].map((item, i) => (
+                                    <motion.div key={i} initial={{opacity:0,y:30}} whileInView={{opacity:1,y:0}} viewport={{once:true}} transition={{delay:i*0.15}} className="relative group">
+                                        <div className="bg-zinc-900/50 backdrop-blur-sm rounded-3xl p-8 border border-zinc-800 hover:shadow-2xl transition-all duration-300 hover:-translate-y-2">
+                                            <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${item.color} flex items-center justify-center text-white mb-6 shadow-lg group-hover:scale-110 transition-transform`}>{item.icon}</div>
+                                            <div className="text-6xl font-display font-black text-zinc-800 absolute top-6 right-8 opacity-50">{item.step}</div>
+                                            <h3 className="text-xl font-bold text-white mb-3">{item.title}</h3>
+                                            <p className="text-zinc-400 leading-relaxed">{item.desc}</p>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Stats ────────────────────────────────────── */}
+                    <div className="py-20 bg-gradient-to-r from-emerald-900 via-emerald-800 to-emerald-900">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
+                                {[
+                                    { value: 50000, suffix: '+', label: 'Active Users' },
+                                    { value: 39, suffix: '+', label: 'Products in DB' },
+                                    { value: 12, suffix: '+', label: 'Allergen Types' },
+                                    { value: 99, suffix: '%', label: 'Detection Rate' },
+                                ].map((s,i)=>(
+                                    <motion.div key={i} initial={{opacity:0,scale:0.8}} whileInView={{opacity:1,scale:1}} viewport={{once:true}} transition={{delay:i*0.1}}>
+                                        <div className="text-4xl lg:text-5xl font-display font-black"><AnimatedCounter target={s.value} suffix={s.suffix}/></div>
+                                        <div className="text-emerald-200 font-medium mt-2 text-sm uppercase tracking-wider">{s.label}</div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Features Grid ────────────────────────────── */}
+                    <div className="py-24 bg-black">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <motion.div initial={{opacity:0,y:20}} whileInView={{opacity:1,y:0}} viewport={{once:true}} className="text-center mb-16">
+                                <span className="text-emerald-400 font-semibold text-sm uppercase tracking-wider">Powerful Features</span>
+                                <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mt-3">Everything You Need</h2>
+                            </motion.div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {features.map((f,i)=>(
+                                    <motion.div key={i} initial={{opacity:0,y:20}} whileInView={{opacity:1,y:0}} viewport={{once:true}} transition={{delay:i*0.08}} className="bg-zinc-900/50 backdrop-blur-sm rounded-2xl p-6 border border-zinc-800 hover:shadow-[0_0_20px_rgba(52,211,153,0.1)] hover:border-emerald-500/30 transition-all group">
+                                        <div className="w-14 h-14 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-4 group-hover:bg-emerald-500 group-hover:text-white transition-all shadow-sm">{f.icon}</div>
+                                        <h3 className="text-lg font-bold text-white mb-2">{f.title}</h3>
+                                        <p className="text-zinc-400 text-sm leading-relaxed">{f.desc}</p>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Common Allergens ─────────────────────────── */}
+                    <div className="py-24 bg-black">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-zinc-900 pt-24">
+                            <motion.div initial={{opacity:0,y:20}} whileInView={{opacity:1,y:0}} viewport={{once:true}} className="text-center mb-16">
+                                <span className="text-amber-300 font-semibold text-sm uppercase tracking-wider">Allergen Awareness</span>
+                                <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mt-3">We Detect These Allergens</h2>
+                                <p className="text-zinc-400 mt-4 max-w-2xl mx-auto text-lg">Our database covers all major food allergens recognized by global food safety authorities.</p>
+                            </motion.div>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+                                {allergens.map((a,i)=>(
+                                    <motion.div key={i} initial={{opacity:0,scale:0.8}} whileInView={{opacity:1,scale:1}} viewport={{once:true}} transition={{delay:i*0.05}} className="bg-zinc-900 rounded-2xl p-4 text-center border border-zinc-800 hover:border-amber-400/30 hover:bg-zinc-800 transition-all cursor-default">
+                                        <div className="text-3xl mb-2 grayscale opacity-80 hover:grayscale-0 hover:opacity-100 transition-all">{a.emoji}</div>
+                                        <div className="text-xs font-bold text-zinc-300">{a.name}</div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Testimonials ─────────────────────────────── */}
+                    <div className="py-24 bg-black">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-zinc-900 pt-24">
+                            <motion.div initial={{opacity:0,y:20}} whileInView={{opacity:1,y:0}} viewport={{once:true}} className="text-center mb-16">
+                                <span className="text-brand-yellow font-semibold text-sm uppercase tracking-wider">Testimonials</span>
+                                <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mt-3">Loved by Thousands</h2>
+                            </motion.div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                {testimonials.map((t,i)=>(
+                                    <motion.div key={i} initial={{opacity:0,y:20}} whileInView={{opacity:1,y:0}} viewport={{once:true}} transition={{delay:i*0.1}} className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-5"><ShieldCheck size={80}/></div>
+                                        <div className="flex mb-3 relative z-10">{Array.from({length:t.rating}).map((_,j)=>(<Star key={j} size={16} className="text-brand-yellow fill-brand-yellow"/>))}</div>
+                                        <p className="text-zinc-400 leading-relaxed mb-6 italic relative z-10">"{t.text}"</p>
+                                        <div className="flex items-center space-x-3 border-t border-zinc-800 pt-4 relative z-10">
+                                            <img src={t.avatar} alt={t.name} className="w-10 h-10 rounded-full border border-zinc-700"/>
+                                            <span className="font-bold text-white text-sm">{t.name}</span>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── FAQ ──────────────────────────────────────── */}
+                    <div className="py-24 bg-black">
+                        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-zinc-900 pt-24">
+                            <motion.div initial={{opacity:0,y:20}} whileInView={{opacity:1,y:0}} viewport={{once:true}} className="text-center mb-16">
+                                <span className="text-emerald-400 font-semibold text-sm uppercase tracking-wider">FAQ</span>
+                                <h2 className="text-4xl font-display font-bold text-white mt-3">Common Questions</h2>
+                            </motion.div>
+                            <div className="space-y-4">
+                                {faqs.map((faq,i)=>(
+                                    <motion.div key={i} initial={{opacity:0,y:10}} whileInView={{opacity:1,y:0}} viewport={{once:true}} transition={{delay:i*0.05}} className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+                                        <button onClick={()=>setOpenFaq(openFaq===i?null:i)} className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-zinc-800/50 transition-colors">
+                                            <span className="font-semibold text-white">{faq.q}</span>
+                                            <ChevronDown size={20} className={`text-zinc-500 transition-transform ${openFaq===i?'rotate-180':''}`}/>
+                                        </button>
+                                        <AnimatePresence>{openFaq===i&&(<motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:0.3}} className="overflow-hidden"><div className="px-6 pb-5 text-zinc-400 leading-relaxed border-t border-zinc-800 pt-4 mt-2">{faq.a}</div></motion.div>)}</AnimatePresence>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Footer ───────────────────────────────────── */}
+                    <footer className="bg-gray-900 text-gray-400 py-16">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
+                                <div className="md:col-span-2">
+                                    <div className="flex items-center space-x-2 mb-4"><ShieldCheck size={28} className="text-brand-blue"/><span className="text-xl font-display font-bold text-white">Bite<span className="text-brand-blue">Right</span></span></div>
+                                    <p className="text-gray-500 leading-relaxed max-w-sm">AI-powered food safety scanner that detects allergens and flags unsafe ingredients based on your personal health profile.</p>
+                                </div>
+                                <div><h4 className="text-white font-bold mb-4">Product</h4><ul className="space-y-2 text-sm"><li><a href="#" className="hover:text-white transition-colors">OCR Scanner</a></li><li><a href="#" className="hover:text-white transition-colors">Product Database</a></li><li><a href="#" className="hover:text-white transition-colors">Health Profiles</a></li></ul></div>
+                                <div><h4 className="text-white font-bold mb-4">About</h4><ul className="space-y-2 text-sm"><li><a href="#" className="hover:text-white transition-colors">How It Works</a></li><li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li><li><a href="#" className="hover:text-white transition-colors">Contact Us</a></li></ul></div>
+                            </div>
+                            <div className="border-t border-gray-800 mt-12 pt-8 text-center text-sm text-gray-600">© 2026 Bite-Right. Built for safer eating.</div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        // ── Auth Page (Google Sign-In) ──────────────────────────
+        const Auth = () => {
+            const { login, navigate } = useAppContext();
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+
+            const signInWithGoogle = async () => {
+                setLoading(true); setError('');
+                try {
+                    const result = await auth.signInWithPopup(googleProvider);
+                    const u = result.user;
+                    login({ name: u.displayName || 'User', email: u.email, photo: u.photoURL });
+                } catch (err) {
+                    console.error('Firebase Auth Error:', err.code, err.message);
+                    if (err.code === 'auth/popup-closed-by-user') {
+                        setError('Sign-in popup was closed. Please try again.');
+                    } else if (err.code === 'auth/unauthorized-domain') {
+                        setError('This domain is not authorized. Go to Firebase Console → Authentication → Settings → Authorized domains and add "localhost".');
+                    } else if (err.code === 'auth/configuration-not-found' || err.code === 'auth/operation-not-allowed' || err.code === 'auth/admin-restricted-operation') {
+                        setError('Google Sign-In is not enabled. Go to Firebase Console → Authentication → Sign-in method → Google → Enable it.');
+                    } else if (err.code === 'auth/internal-error') {
+                        setError('Google Sign-In provider not enabled. Go to Firebase Console → Authentication → Sign-in method → Enable Google.');
+                    } else if (err.code === 'auth/network-request-failed') {
+                        setError('Network error. Please check your internet connection.');
+                    } else {
+                        setError(`Auth error (${err.code || 'unknown'}): ${err.message || 'Please try again.'}`);
+                    }
+                }
+                setLoading(false);
+            };
+
+            // Fallback: demo login without Firebase
+            const demoLogin = () => { login({ name: 'Demo User', email: 'demo@biteright.com', photo: null }); };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4 bg-black relative overflow-hidden">
+                    <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-500/10 blur-[120px]"></div>
+                    <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-amber-500/10 blur-[120px]"></div>
+                    <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.5}} className="w-full max-w-md bg-zinc-900/80 backdrop-blur-md border border-zinc-800 shadow-[0_0_50px_rgba(0,0,0,0.5)] p-8 sm:p-10 rounded-[2rem] relative z-10">
+                        <div className="text-center mb-8">
+                            <motion.div initial={{scale:0}} animate={{scale:1}} transition={{type:"spring",stiffness:200,damping:15}} className="w-20 h-20 bg-emerald-500/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 text-emerald-400">
+                                <ShieldCheck size={40}/>
+                            </motion.div>
+                            <h2 className="text-3xl font-display font-bold text-white mb-2 font-['Playfair_Display']">Welcome to BiteRight</h2>
+                            <p className="text-zinc-400 text-sm font-['Inter']">Sign in to start scanning food labels safely.</p>
+                        </div>
+
+                        {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl p-4 mb-6 flex items-start space-x-3"><AlertTriangle size={18} className="mt-0.5 flex-shrink-0"/><span>{error}</span></div>}
+
+                        <motion.button whileHover={{scale:1.02}} whileTap={{scale:0.98}} onClick={signInWithGoogle} disabled={loading}
+                            className="w-full flex items-center justify-center space-x-3 bg-zinc-800 border border-zinc-700 rounded-xl py-4 px-6 font-semibold text-white hover:bg-zinc-700 transition-all shadow-sm disabled:opacity-60">
+                            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
+                            <span>{loading ? 'Signing in...' : 'Sign in with Google'}</span>
+                        </motion.button>
+
+                        <div className="my-8 flex items-center"><div className="flex-1 h-px bg-zinc-800"></div><span className="px-4 text-xs text-zinc-600 font-bold uppercase tracking-wider">OR</span><div className="flex-1 h-px bg-zinc-800"></div></div>
+
+                        <motion.button whileHover={{scale:1.02}} whileTap={{scale:0.98}} onClick={demoLogin}
+                            className="w-full bg-gradient-to-r from-emerald-600 to-emerald-800 text-white border border-emerald-500/50 rounded-xl py-4 font-semibold shadow-lg shadow-emerald-900/30">
+                            Continue as Demo User
+                        </motion.button>
+
+                        <p className="text-xs text-zinc-500 text-center mt-8 px-4 leading-relaxed">By signing in, you agree to our Terms of Service and Privacy Policy.</p>
+                    </motion.div>
+                </div>
+            );
+        };
+
+        // Remaining components loaded from external file
+    </script>
+    <script type="text/babel" data-presets="react" src="src/app.jsx"></script>
+</body>
+</html>
